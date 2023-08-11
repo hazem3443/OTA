@@ -212,7 +212,7 @@ static void http_get_task(void *pvParameters)
 
 void app_main(void)
 {
-    //Initialize NVS
+    // Initialize NVS. NVS is a persistent storage library, which is used to store persistent data.
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
       ESP_ERROR_CHECK(nvs_flash_erase());
@@ -220,9 +220,12 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
+    // Log the WiFi mode. In this case, the mode is STA (Station mode).
     ESP_LOGI(TAG, "ESP_WIFI_MODE_STA");
+    // Initialize the WiFi station. This involves setting up the WiFi configuration and starting the WiFi.
     wifi_init_sta();
 
+    // Create a new task for the HTTP GET request. This task will send the request and handle the response.
     xTaskCreate(&http_get_task, "http_get_task", 4096, NULL, 5, NULL);
 
 }
