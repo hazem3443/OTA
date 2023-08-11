@@ -87,8 +87,8 @@ void wifi_init_sta(void)
     // Set WiFi SSID and password
     wifi_config_t wifi_config = {
         .sta = {
-            .ssid = "Hazem",
-            .password = "HazemKhaledMohamed",
+            .ssid = getenv("WIFI_SSID"),
+            .password = getenv("WIFI_PASSWORD"),
         },
     };
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
