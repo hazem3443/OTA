@@ -212,6 +212,14 @@ static void http_get_task(void *pvParameters)
 }
 
 // Main function
+void log_task(void *pvParameters)
+{
+    while(1) {
+        ESP_LOGI(TAG, "This log is added to test the periodicity of 100ms task. Timestamp: %lld", esp_timer_get_time());
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+    }
+}
+
 void app_main(void)
 {
     // Initialize NVS (Non-Volatile Storage)
@@ -230,5 +238,10 @@ void app_main(void)
 
     // Create a new task for the HTTP GET request
     xTaskCreate(&http_get_task, "http_get_task", 4096, NULL, 5, NULL);
+
+    // Create a new task for logging every 100ms
+    xTaskCreate(&log_task, "log_task", 4096, NULL, 5, NULL);
+}
+    xTaskCreate(&log_task, "log_task", 4096, NULL, 5, NULL);
 
 }
