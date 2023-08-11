@@ -33,3 +33,16 @@ Below is short explanation of remaining files in the project folder.
 ```
 Additionally, the sample project contains Makefile and component.mk files, used for the legacy Make based build system. 
 They are not used or needed when building with CMake and idf.py.
+
+## Main Function Flowchart
+
+Here is a basic flowchart of the main function:
+
+```mermaid
+graph TD;
+    A[Start] --> B[Initial Step];
+    B --> C{Condition};
+    C -->|True| D[Action 1];
+    C -->|False| E[Action 2];
+    D --> F[End];
+    E --> F;
