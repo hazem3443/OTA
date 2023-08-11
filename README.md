@@ -14,6 +14,13 @@ that copies the project to user specified path and set it's name. For more infor
 We encourage the users to use the example as a template for the new projects.
 A recommended way is to follow the instructions on a [docs page](https://docs.espressif.com/projects/esp-idf/en/latest/api-guides/build-system.html#start-a-new-project).
 
+Before running the program, you need to set the `WIFI_SSID` and `WIFI_PASSWORD` environment variables. You can do this in the terminal with the following commands:
+```bash
+export WIFI_SSID=your_wifi_ssid
+export WIFI_PASSWORD=your_wifi_password
+```
+Replace `your_wifi_ssid` and `your_wifi_password` with your actual WiFi SSID and password.
+
 ## Main Flow of the Program
 Here is a mermaid diagram to illustrate the main flow of the program:
 
