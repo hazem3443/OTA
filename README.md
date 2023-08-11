@@ -29,8 +29,25 @@ graph TD;
     A[Start] --> B[Initialize NVS];
     B --> C[Log WiFi Mode];
     C --> D[Initialize WiFi Station];
-    D --> E[Create HTTP GET Task];
-    E --> F[End];
+    D --> E[Create Task];
+    E --> F[Create HTTP GET Task];
+    F --> G[End];
+```
+
+## WiFi and ESP32 Connection Sequence
+
+Here is a mermaid sequence diagram to illustrate how the connection is established between the WiFi and the ESP32 device:
+
+```mermaid
+sequenceDiagram
+    participant ESP32
+    participant WiFi
+    ESP32->>WiFi: Request Connection
+    WiFi-->>ESP32: Acknowledge Connection
+    ESP32->>WiFi: Send Credentials (SSID, Password)
+    WiFi-->>ESP32: Validate Credentials
+    ESP32->>WiFi: Establish Connection
+    WiFi-->>ESP32: Connection Established
 ```
 
 ## Example folder contents
