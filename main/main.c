@@ -242,5 +242,3 @@ void app_main(void)
     // Create a new task for logging every 100ms
     xTaskCreate(&log_task, "log_task", 4096, NULL, 5, NULL);
 }
-
-}
