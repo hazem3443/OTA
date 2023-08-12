@@ -222,8 +222,47 @@ void log_task(void *pvParameters)
 
 void download_and_log_file(const char *url)
 {
-    // Code to download the file from the URL and store it in esp32 memory
-    // Code to log the content of the file using ESP_LOGI function
+    esp_http_client_config_t config = {
+        .url = url,
+    };
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    esp_err_t err = esp_http_client_open(client, 0);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to open HTTP connection: %s", esp_err_to_name(err));
+    } else {
+        int content_length = esp_http_client_fetch_headers(client);
+        char *buffer = malloc(content_length);
+        if (buffer == NULL) {
+            ESP_LOGE(TAG, "Failed to allocate memory for download buffer");
+        } else {
+            int total_read_len = 0, read_len;
+            while (total_read_len < content_length) {
+                read_len = esp_http_client_read(client, buffer + total_read_len, content_length - total_read_len);
+                if (read_len <= 0) {
+                    ESP_LOGE(TAG, "Error reading data");
+                    break;
+                }
+                total_read_len += read_len;
+            }
+
+            // Store the downloaded data in NVS
+            nvs_handle_t nvs_handle;
+            err = nvs_open("storage", NVS_READWRITE, &nvs_handle);
+            if (err != ESP_OK) {
+                ESP_LOGE(TAG, "Error opening NVS");
+            } else {
+                err = nvs_set_str(nvs_handle, "downloaded_file", buffer);
+                if (err != ESP_OK) {
+                    ESP_LOGE(TAG, "Error writing to NVS");
+                }
+                nvs_close(nvs_handle);
+            }
+
+            free(buffer);
+        }
+    }
+    esp_http_client_close(client);
+    esp_http_client_cleanup(client);
 }
 
 void app_main(void)
