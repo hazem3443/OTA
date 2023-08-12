@@ -220,6 +220,12 @@ void log_task(void *pvParameters)
     }
 }
 
+void download_and_log_file(const char *url)
+{
+    // Code to download the file from the URL and store it in esp32 memory
+    // Code to log the content of the file using ESP_LOGI function
+}
+
 void app_main(void)
 {
     // Initialize NVS (Non-Volatile Storage)
@@ -241,4 +247,7 @@ void app_main(void)
 
     // Create a new task for logging every 100ms
     xTaskCreate(&log_task, "log_task", 4096, NULL, 5, NULL);
+
+    // Call the new function with the URL of the 'New_SW.txt' file in the GitHub repo
+    download_and_log_file("https://github.com/hazem3443/OTA/blob/main/New_SW.txt");
 }
