@@ -1,0 +1,6 @@
+build/.bin_timestamp
+build/.bin_timestamp
+build/.ninja_deps
+build/.ninja_log
+build/bootloader/.ninja_log
+build/esp-idf/main/libmain.a
