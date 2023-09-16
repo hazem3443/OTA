@@ -12,12 +12,16 @@
 #include "lwip/err.h"
 #include "lwip/sys.h"
 #include "esp_http_client.h"
+#include "esp_https_ota.h"
 
+#include "driver/gpio.h"
 #include "esp_netif.h"
 #include "lwip/sockets.h"
 #include "lwip/sys.h"
 #include "lwip/netdb.h"
 #include "lwip/dns.h"
+#include "cJSON.h"
+
 
 #define EXAMPLE_ESP_MAXIMUM_RETRY 10
 
@@ -87,6 +91,7 @@ void wifi_init_sta(void)
                                                         &event_handler,
                                                         NULL,
                                                         &instance_any_id));
+
     ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
                                                         IP_EVENT_STA_GOT_IP,
                                                         &event_handler,
