@@ -42,3 +42,9 @@ there are two memory categories:
 | RTC SLOW Memory | 0x5000 0000 - 0x5000 1FFF | 8 KB | 8 KB of data memory that is accessible by both CPUs and ULP coprocessor. It can retain data in deep-sleep mode. |
 | External Flash | Configurable (0x400C 2000 - 0x40BF FFFF on the instruction Bus ) or ( 0x3F40 0000 - 0x3F7F FFFF Data bus remap) | 4 MB | Up to 16 MB of external SPI flash that can be mapped to the CPU address space. |
 | External SRAM    | Configurable (0x3F80 0000 - 0x3FBF FFFF)    | 4 MB | Up to 8 MB of external SPI PSRAM that can be mapped to the CPU address space. |
+
+### Partition Table information
+
+- A single ESP32’s flash can contain multiple apps, as well as many different kinds of data (calibration data, filesystems, parameter storage, etc). For this reason a partition table is flashed to (default offset) 0x8000 in the flash and The partition table length is 0xC00 bytes,.
+- An MD5 checksum, used for checking the integrity of the partition table at runtime, is appended after the table data. Thus, the partition table occupies an entire flash sector, which size is 0x1000 (4 KB). As a result, any partition following it must be at least located at (default offset) + 0x1000.
+- Each entry in the partition table has a name (label), type (app, data, or something else), subtype and the offset in flash where the partition is loaded.
