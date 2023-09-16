@@ -1,5 +1,10 @@
 
-\build\*.*
+\build\*
+\build\*.
 !*.bin
 !*.map
-!*.out
+!*.elf
+!build\partition_table\partition-table.bin
+!build\bootloader\bootloader.bin
+!build\bootloader\bootloader.map
+!build\bootloader\bootloader.elf
