@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -22,7 +23,6 @@
 #include "lwip/dns.h"
 #include "cJSON.h"
 
-
 #define EXAMPLE_ESP_MAXIMUM_RETRY 10
 
 /* FreeRTOS event group to signal when we are connected*/
@@ -34,10 +34,13 @@ static EventGroupHandle_t s_wifi_event_group;
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT BIT1
 
+extern const char server_cert_pem_start[] asm("_binary_certs_pem_start");
+extern const char server_cert_pem_end[] asm("_binary_certs_pem_end");
+
 static const char *TAG = "wifi station";
 
 static int s_retry_num = 0;
-
+esp_err_t _http_event_handler(esp_http_client_event_t *evt);
 static void event_handler(void *arg, esp_event_base_t event_base,
                           int32_t event_id, void *event_data)
 {
@@ -248,13 +251,18 @@ void log_task(void *pvParameters)
 }
 */
 #include "esp_heap_caps.h"
-void download_and_log_file(const char *url)
+double FWVersion;
+// receive buffer
+char rcv_buffer[200];
+
+void download_and_log_file(const char *url, double *FWVersion, char *binFilePath)
 {
     esp_http_client_config_t config = {
         .url = url,
+        .event_handler = _http_event_handler,
     };
     esp_http_client_handle_t client = esp_http_client_init(&config);
-    esp_err_t err = esp_http_client_open(client, 0);
+    esp_err_t err = esp_http_client_perform(client);
 
     ESP_LOGW(TAG, "download file %s free heapSize %d", url, heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
 
@@ -264,50 +272,113 @@ void download_and_log_file(const char *url)
     }
     else
     {
-        int content_length = esp_http_client_fetch_headers(client);
-        ESP_LOGW(TAG, "downloaded File Size %d", content_length);
-
-        char *buffer = malloc(content_length);
-        if (buffer == NULL)
-        {
-            ESP_LOGE(TAG, "Failed to allocate memory for download buffer");
-        }
+        char *buffer = malloc(1024);
+        int len = esp_http_client_read_response(client, buffer, 1024);
+        
+        printf("rcv_buffer = '%s' ,len = %d \n", buffer, len);
+        cJSON *json = cJSON_Parse(buffer);
+        if (json == NULL)
+            printf("downloaded file is not a valid json, aborting...\n");
         else
         {
-            int total_read_len = 0, read_len;
-            while (total_read_len < content_length)
+            cJSON *version = cJSON_GetObjectItemCaseSensitive(json, "version");
+            cJSON *file = cJSON_GetObjectItemCaseSensitive(json, "binfile");
+            // FWVersion = version->valuedouble;
+            if (!cJSON_IsNumber(version))
+                printf("unable to read new version, aborting...\n");
+            else
             {
-                read_len = esp_http_client_read(client, buffer + total_read_len, content_length - total_read_len);
-                if (read_len <= 0)
-                {
-                    ESP_LOGE(TAG, "Error reading data");
-                    break;
-                }
-                total_read_len += read_len;
+                *FWVersion = version->valuedouble;
+                printf("HTTPS OTA, firmware %.1f\n\n", *FWVersion);
             }
 
-            // Store the downloaded data in NVS
-            nvs_handle_t nvs_handle;
-            err = nvs_open("storage", NVS_READWRITE, &nvs_handle);
-            if (err != ESP_OK)
+            if (cJSON_IsString(file) && (file->valuestring != NULL))
             {
-                ESP_LOGE(TAG, "Error opening NVS");
+                strcpy(binFilePath, file->valuestring);
+                printf("downloading and installing new firmware (%s)...\n", binFilePath);
             }
             else
             {
-                err = nvs_set_str(nvs_handle, "downloaded_file", buffer);
-                if (err != ESP_OK)
-                {
-                    ESP_LOGE(TAG, "Error writing to NVS");
-                }
-                nvs_close(nvs_handle);
+                printf("unable to read the new file name, aborting...\n");
             }
-
-            free(buffer);
         }
     }
+    /*
+            int content_length = esp_http_client_fetch_headers(client);
+            ESP_LOGW(TAG, "downloaded File Size %d", content_length);
+
+            char *buffer = malloc(content_length);
+            if (buffer == NULL)
+            {
+                ESP_LOGE(TAG, "Failed to allocate memory for download buffer");
+            }
+            else
+            {
+                int total_read_len = 0, read_len;
+                while (total_read_len < content_length)
+                {
+                    read_len = esp_http_client_read(client, buffer + total_read_len, content_length - total_read_len);
+                    if (read_len <= 0)
+                    {
+                        ESP_LOGE(TAG, "Error reading data");
+                        break;
+                    }
+                    total_read_len += read_len;
+                }
+
+                // Store the downloaded data in NVS
+                nvs_handle_t nvs_handle;
+                err = nvs_open("storage", NVS_READWRITE, &nvs_handle);
+                if (err != ESP_OK)
+                {
+                    ESP_LOGE(TAG, "Error opening NVS");
+                }
+                else
+                {
+                    err = nvs_set_str(nvs_handle, "downloaded_file", buffer);
+                    if (err != ESP_OK)
+                    {
+                        ESP_LOGE(TAG, "Error writing to NVS");
+                    }
+                    nvs_close(nvs_handle);
+                }
+
+                free(buffer);
+            }
+        }
+        */
     esp_http_client_close(client);
     esp_http_client_cleanup(client);
+}
+
+// esp_http_client event handler
+esp_err_t _http_event_handler(esp_http_client_event_t *evt)
+{
+    switch (evt->event_id)
+    {
+    case HTTP_EVENT_ERROR:
+        break;
+    case HTTP_EVENT_ON_CONNECTED:
+        break;
+    case HTTP_EVENT_HEADER_SENT:
+        break;
+    case HTTP_EVENT_ON_HEADER:
+        break;
+    case HTTP_EVENT_ON_DATA:
+        if (!esp_http_client_is_chunked_response(evt->client))
+        {
+            strncpy(rcv_buffer, (char *)evt->data, evt->data_len);
+        }
+        break;
+    case HTTP_EVENT_ON_FINISH:
+        break;
+    case HTTP_EVENT_DISCONNECTED:
+        break;
+    default:
+        break;
+    }
+    printf("_http_event_handler %i '%s' \n", evt->event_id, rcv_buffer);
+    return ESP_OK;
 }
 
 void app_main(void)
@@ -321,6 +392,33 @@ void app_main(void)
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
+    // read the saved version
+    nvs_handle_t nvs_handle;
+    esp_err_t err = nvs_open("storage", NVS_READONLY, &nvs_handle);
+    if (err != ESP_OK)
+    {
+        printf("Error opening NVS handle\n");
+    }
+
+    // Read the binary data
+    size_t size = sizeof(double);
+    uint8_t *data = malloc(size);
+    err = nvs_get_blob(nvs_handle, "FWVersion", data, &size);
+    if (err != ESP_OK)
+    {
+        printf("Error getting value\n");
+        // return;
+    }
+    // Cast the binary data to a float value
+    FWVersion = *(double *)data;
+    printf("HTTPS OTA, firmware %.1f\n", FWVersion);
+    // Free the memory allocated for the binary data
+    free(data);
+
+    // Close the NVS handle
+    nvs_close(nvs_handle);
+
+    // load master server version
 
     // Log the WiFi mode
     ESP_LOGI(TAG, "ESP_WIFI_MODE_STA");
@@ -337,11 +435,88 @@ void app_main(void)
 
     nvs_stats_t nvs_stats;
     nvs_get_stats(NULL, &nvs_stats);
-    ESP_LOGE(TAG,"Total entries: %d\n", nvs_stats.total_entries);
-    ESP_LOGE(TAG,"Used entries: %d\n", nvs_stats.used_entries);
-    ESP_LOGE(TAG,"Free entries: %d\n", nvs_stats.free_entries);
-    ESP_LOGE(TAG,"Namespace count: %d\n", nvs_stats.namespace_count);
+    ESP_LOGW(TAG, "Total entries: %d\n", nvs_stats.total_entries);
+    ESP_LOGW(TAG, "Used entries: %d\n", nvs_stats.used_entries);
+    ESP_LOGW(TAG, "Free entries: %d\n", nvs_stats.free_entries);
+    ESP_LOGW(TAG, "Namespace count: %d\n", nvs_stats.namespace_count);
 
-    download_and_log_file("https://raw.githubusercontent.com/hazem3443/OTA/master/Version.json");
-    download_and_log_file("https://raw.githubusercontent.com/hazem3443/OTA/master/OTA.bin");
+    // start the check update task
+    // xTaskCreate(&check_update_task, "check_update_task", 8192, NULL, 5, NULL);
+    char filePath[200] = {0};
+    download_and_log_file("https://raw.githubusercontent.com/hazem3443/OTA/IAP_OTA_WORKFLOW/Firmware.json", &FWVersion, filePath);
 }
+
+/*
+void check_update_task(void *pvParameter)
+{
+    while (1)
+    {
+        printf("Looking for a new firmware...\n");
+        // configure the esp_http_client
+        esp_http_client_config_t config = {
+            .url = UPDATE_JSON_URL,
+            .event_handler = _http_event_handler,
+        };
+        esp_http_client_handle_t client = esp_http_client_init(&config);
+
+        // downloading the json file
+        esp_err_t err = esp_http_client_perform(client);
+        if (err == ESP_OK)
+        {
+
+            // parse the json file
+            cJSON *json = cJSON_Parse(rcv_buffer);
+            if (json == NULL)
+                printf("downloaded file is not a valid json, aborting...\n");
+            else
+            {
+                cJSON *version = cJSON_GetObjectItemCaseSensitive(json, "version");
+                cJSON *file = cJSON_GetObjectItemCaseSensitive(json, "binfile");
+
+                // check the version
+                if (!cJSON_IsNumber(version))
+                    printf("unable to read new version, aborting...\n");
+                else
+                {
+                    double new_version = version->valuedouble;
+                    if (new_version > FIRMWARE_VERSION)
+                    {
+                        printf("current firmware version (%.1f) is lower than the available one (%.1f), upgrading...\n", FIRMWARE_VERSION, new_version);
+                        if (cJSON_IsString(file) && (file->valuestring != NULL))
+                        {
+                            printf("downloading and installing new firmware (%s)...\n", file->valuestring);
+
+                            esp_http_client_config_t ota_client_config = {
+                                .url = file->valuestring,
+                                .cert_pem = server_cert_pem_start,
+                            };
+                            esp_err_t ret = esp_https_ota(&ota_client_config);
+                            if (ret == ESP_OK)
+                            {
+                                printf("OTA OK, restarting...\n");
+                                esp_restart();
+                            }
+                            else
+                            {
+                                printf("OTA failed...\n");
+                            }
+                        }
+                        else
+                            printf("unable to read the new file name, aborting...\n");
+                    }
+                    else
+                        printf("current firmware version (%.1f) is greater or equal to the available one (%.1f), nothing to do...\n", FIRMWARE_VERSION, new_version);
+                }
+            }
+        }
+        else
+            printf("unable to download the json file, aborting...\n");
+
+        // cleanup
+        esp_http_client_cleanup(client);
+
+        printf("\n");
+        vTaskDelay(30000 / portTICK_PERIOD_MS);
+    }
+}
+*/

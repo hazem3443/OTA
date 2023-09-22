@@ -1,4 +1,4 @@
 {
-    "version" :"1.0",
-    "binfile" :"https://raw.githubusercontent.com/hazem3443/OTA/master/build/OTA.bin"
+  "version": 1.0,
+  "binfile": "https://raw.githubusercontent.com/hazem3443/OTA/master/build/OTA.bin"
 }
