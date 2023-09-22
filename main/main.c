@@ -37,7 +37,11 @@ static EventGroupHandle_t s_wifi_event_group;
 extern const char server_cert_pem_start[] asm("_binary_certs_pem_start");
 extern const char server_cert_pem_end[] asm("_binary_certs_pem_end");
 
-static const char *TAG = "wifi station";
+static const char *TAG_WIFI = "WIFI";
+static const char *TAG_HTTP = "HTTP";
+static const char *TAG_DOWNLOAD = "DOWNLOAD_FW";
+static const char *TAG_UPDATE = "UPDATE_SW";
+static const char *TAG_NVS = "NVS";
 
 static int s_retry_num = 0;
 esp_err_t _http_event_handler(esp_http_client_event_t *evt);
@@ -54,18 +58,18 @@ static void event_handler(void *arg, esp_event_base_t event_base,
         {
             esp_wifi_connect();
             s_retry_num++;
-            ESP_LOGI(TAG, "retry to connect to the AP");
+            ESP_LOGI(TAG_WIFI, "retry to connect to the AP");
         }
         else
         {
             xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
         }
-        ESP_LOGI(TAG, "connect to the AP fail");
+        ESP_LOGI(TAG_WIFI, "connect to the AP fail");
     }
     else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
     {
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
-        ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
+        ESP_LOGI(TAG_WIFI, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
         s_retry_num = 0;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
     }
@@ -112,7 +116,7 @@ void wifi_init_sta(void)
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
 
-    ESP_LOGI(TAG, "wifi_init_sta finished.");
+    ESP_LOGI(TAG_WIFI, "wifi_init_sta finished.");
 
     /* Waiting until either the connection is established (WIFI_CONNECTED_BIT) or connection failed for the maximum
      * number of re-tries (WIFI_FAIL_BIT). The bits are set by event_handler() (see above) */
@@ -126,17 +130,17 @@ void wifi_init_sta(void)
      * happened. */
     if (bits & WIFI_CONNECTED_BIT)
     {
-        ESP_LOGI(TAG, "connected to ap SSID:%s password:%s",
+        ESP_LOGI(TAG_WIFI, "connected to ap SSID:%s password:%s",
                  "realme 6 Pro", "01015548853");
     }
     else if (bits & WIFI_FAIL_BIT)
     {
-        ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s",
+        ESP_LOGI(TAG_WIFI, "Failed to connect to SSID:%s, password:%s",
                  "realme 6 Pro", "01015548853");
     }
     else
     {
-        ESP_LOGE(TAG, "UNEXPECTED EVENT");
+        ESP_LOGE(TAG_WIFI, "UNEXPECTED EVENT");
     }
 }
 /*
@@ -251,12 +255,12 @@ void log_task(void *pvParameters)
 }
 */
 #include "esp_heap_caps.h"
-double FWVersion;
+static int FWVersion;
 // receive buffer
 char rcv_buffer[200];
 static SemaphoreHandle_t xSemaphore = NULL;
 
-void download_and_log_file(const char *url, double *FWVersion, char *binFilePath)
+void download_and_log_file(const char *url, int *FWVersion, char *binFilePath)
 {
     esp_http_client_config_t config = {
         .url = url,
@@ -267,41 +271,58 @@ void download_and_log_file(const char *url, double *FWVersion, char *binFilePath
     esp_err_t err = esp_http_client_perform(client);
     if (xSemaphoreTake(xSemaphore, portMAX_DELAY) != pdTRUE)
     {
-        ESP_LOGE(TAG, "Error waiting for semaphore");
+        ESP_LOGE(TAG_HTTP, "Error waiting for semaphore");
     }
 
     if (err != ESP_OK)
     {
-        ESP_LOGE(TAG, "Failed to open HTTP connection: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG_HTTP, "Failed to open HTTP connection: %s", esp_err_to_name(err));
     }
     else
     {
-        ESP_LOGI(TAG, "received buffer = '%s' ,len = %d \n", rcv_buffer, strlen(rcv_buffer));
+        ESP_LOGI(TAG_HTTP, "received buffer = '%s' ,len = %d", rcv_buffer, strlen(rcv_buffer));
         cJSON *json = cJSON_Parse(rcv_buffer);
         if (json == NULL)
-            ESP_LOGE(TAG, "downloaded file is not a valid json, aborting...\n");
+            ESP_LOGE(TAG_DOWNLOAD, "downloaded file is not a valid json, aborting...");
         else
         {
             cJSON *version = cJSON_GetObjectItemCaseSensitive(json, "version");
             cJSON *file = cJSON_GetObjectItemCaseSensitive(json, "binfile");
             if (!cJSON_IsNumber(version))
             {
-                ESP_LOGE(TAG, "unable to read new version, aborting...\n");
+                ESP_LOGE(TAG_DOWNLOAD, "unable to read new version, aborting...");
             }
             else
             {
-                *FWVersion = version->valuedouble;
-                ESP_LOGI(TAG, "HTTPS OTA, firmware %.1f\n\n", *FWVersion);
-            }
+                ESP_LOGI(TAG_DOWNLOAD, "HTTPS OTA, firmware %i", *FWVersion);
+                if (*FWVersion < version->valuedouble)
+                {
+                    *FWVersion = version->valuedouble;
+                    if (cJSON_IsString(file) && (file->valuestring != NULL))
+                    {
+                        strcpy(binFilePath, file->valuestring);
+                        ESP_LOGI(TAG_DOWNLOAD, "downloading and installing new firmware (%s)...", binFilePath);
 
-            if (cJSON_IsString(file) && (file->valuestring != NULL))
-            {
-                strcpy(binFilePath, file->valuestring);
-                ESP_LOGI(TAG, "downloading and installing new firmware (%s)...\n", binFilePath);
-            }
-            else
-            {
-                ESP_LOGE(TAG, "unable to read the new file name, aborting...\n");
+                        // config.cert_pem = server_cert_pem_start;
+                        esp_https_ota_config_t ota_client_config = {  
+                            .http_config = &config, 
+                        };
+                        esp_err_t ret = esp_https_ota(&ota_client_config);
+                        if (ret == ESP_OK)
+                        {
+                            ESP_LOGI(TAG_UPDATE, "OTA OK, restarting...");
+                            esp_restart();
+                        }
+                        else
+                        {
+                            ESP_LOGE(TAG_UPDATE, "OTA failed...");
+                        }
+                    }
+                    else
+                    {
+                        ESP_LOGE(TAG_DOWNLOAD, "unable to read the new file name, aborting...");
+                    }
+                }
             }
         }
     }
@@ -353,6 +374,68 @@ void download_and_log_file(const char *url, double *FWVersion, char *binFilePath
     esp_http_client_cleanup(client);
 }
 
+void app_main(void)
+{
+    // Initialize NVS (Non-Volatile Storage)
+    esp_err_t ret = nvs_flash_init();
+    // If no free pages or new version found, erase NVS partition and reinitialize
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+    // read the saved version
+    nvs_handle_t nvs_handle;
+    esp_err_t err = nvs_open("storage", NVS_READONLY, &nvs_handle);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG_NVS, "Error opening NVS handle");
+    }
+
+    // Read the binary data
+    size_t size = sizeof(int);
+    err = nvs_get_blob(nvs_handle, "FWVersion", &FWVersion, &size);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG_NVS, "Error getting value");
+    }
+    else
+    {
+        ESP_LOGE(TAG_NVS, "FW Version %i", FWVersion);
+    }
+
+    // Close the NVS handle
+    nvs_close(nvs_handle);
+
+    // load master server version
+
+    // Log the WiFi mode
+    ESP_LOGI(TAG_WIFI, "ESP_WIFI_MODE_STA");
+    // Initialize the WiFi station
+    wifi_init_sta();
+
+    // Create a new task for the HTTP GET request
+    // xTaskCreate(&http_get_task, "http_get_task", 4096, NULL, 5, NULL);
+
+    // Create a new task for logging every 100ms
+    // xTaskCreate(&log_task, "log_task", 4096, NULL, 5, NULL);
+
+    // Call the new function with the URL of the 'New_SW.txt' file in the GitHub repo
+
+    nvs_stats_t nvs_stats;
+    nvs_get_stats(NULL, &nvs_stats);
+    ESP_LOGW(TAG_NVS, "Total entries: %d", nvs_stats.total_entries);
+    ESP_LOGW(TAG_NVS, "Used entries: %d", nvs_stats.used_entries);
+    ESP_LOGW(TAG_NVS, "Free entries: %d", nvs_stats.free_entries);
+    ESP_LOGW(TAG_NVS, "Namespace count: %d", nvs_stats.namespace_count);
+
+    // start the check update task
+    // xTaskCreate(&check_update_task, "check_update_task", 8192, NULL, 5, NULL);
+    char filePath[200] = {0};
+    download_and_log_file("https://raw.githubusercontent.com/hazem3443/OTA/IAP_OTA_WORKFLOW/Firmware.json", &FWVersion, filePath);
+}
+
 // esp_http_client event handler
 esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 {
@@ -380,81 +463,15 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
     default:
         break;
     }
-    printf("_http_event_handler %i '%s' \n", evt->event_id, rcv_buffer);
+    ESP_LOGI(TAG_HTTP, "_http_event_handler %i", evt->event_id);
     return ESP_OK;
 }
-
-void app_main(void)
-{
-    // Initialize NVS (Non-Volatile Storage)
-    esp_err_t ret = nvs_flash_init();
-    // If no free pages or new version found, erase NVS partition and reinitialize
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
-    {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(ret);
-    // read the saved version
-    nvs_handle_t nvs_handle;
-    esp_err_t err = nvs_open("storage", NVS_READONLY, &nvs_handle);
-    if (err != ESP_OK)
-    {
-        printf("Error opening NVS handle\n");
-    }
-
-    // Read the binary data
-    size_t size = sizeof(double);
-    uint8_t *data = malloc(size);
-    err = nvs_get_blob(nvs_handle, "FWVersion", data, &size);
-    if (err != ESP_OK)
-    {
-        printf("Error getting value\n");
-        // return;
-    }
-    // Cast the binary data to a float value
-    FWVersion = *(double *)data;
-    printf("HTTPS OTA, firmware %.1f\n", FWVersion);
-    // Free the memory allocated for the binary data
-    free(data);
-
-    // Close the NVS handle
-    nvs_close(nvs_handle);
-
-    // load master server version
-
-    // Log the WiFi mode
-    ESP_LOGI(TAG, "ESP_WIFI_MODE_STA");
-    // Initialize the WiFi station
-    wifi_init_sta();
-
-    // Create a new task for the HTTP GET request
-    // xTaskCreate(&http_get_task, "http_get_task", 4096, NULL, 5, NULL);
-
-    // Create a new task for logging every 100ms
-    // xTaskCreate(&log_task, "log_task", 4096, NULL, 5, NULL);
-
-    // Call the new function with the URL of the 'New_SW.txt' file in the GitHub repo
-
-    nvs_stats_t nvs_stats;
-    nvs_get_stats(NULL, &nvs_stats);
-    ESP_LOGW(TAG, "Total entries: %d\n", nvs_stats.total_entries);
-    ESP_LOGW(TAG, "Used entries: %d\n", nvs_stats.used_entries);
-    ESP_LOGW(TAG, "Free entries: %d\n", nvs_stats.free_entries);
-    ESP_LOGW(TAG, "Namespace count: %d\n", nvs_stats.namespace_count);
-
-    // start the check update task
-    // xTaskCreate(&check_update_task, "check_update_task", 8192, NULL, 5, NULL);
-    char filePath[200] = {0};
-    download_and_log_file("https://raw.githubusercontent.com/hazem3443/OTA/IAP_OTA_WORKFLOW/Firmware.json", &FWVersion, filePath);
-}
-
 /*
 void check_update_task(void *pvParameter)
 {
     while (1)
     {
-        printf("Looking for a new firmware...\n");
+        printf("Looking for a new firmware...");
         // configure the esp_http_client
         esp_http_client_config_t config = {
             .url = UPDATE_JSON_URL,
@@ -470,7 +487,7 @@ void check_update_task(void *pvParameter)
             // parse the json file
             cJSON *json = cJSON_Parse(rcv_buffer);
             if (json == NULL)
-                printf("downloaded file is not a valid json, aborting...\n");
+                printf("downloaded file is not a valid json, aborting...");
             else
             {
                 cJSON *version = cJSON_GetObjectItemCaseSensitive(json, "version");
@@ -478,16 +495,16 @@ void check_update_task(void *pvParameter)
 
                 // check the version
                 if (!cJSON_IsNumber(version))
-                    printf("unable to read new version, aborting...\n");
+                    printf("unable to read new version, aborting...");
                 else
                 {
                     double new_version = version->valuedouble;
                     if (new_version > FIRMWARE_VERSION)
                     {
-                        printf("current firmware version (%.1f) is lower than the available one (%.1f), upgrading...\n", FIRMWARE_VERSION, new_version);
+                        printf("current firmware version (%.1f) is lower than the available one (%.1f), upgrading...", FIRMWARE_VERSION, new_version);
                         if (cJSON_IsString(file) && (file->valuestring != NULL))
                         {
-                            printf("downloading and installing new firmware (%s)...\n", file->valuestring);
+                            printf("downloading and installing new firmware (%s)...", file->valuestring);
 
                             esp_http_client_config_t ota_client_config = {
                                 .url = file->valuestring,
@@ -496,29 +513,29 @@ void check_update_task(void *pvParameter)
                             esp_err_t ret = esp_https_ota(&ota_client_config);
                             if (ret == ESP_OK)
                             {
-                                printf("OTA OK, restarting...\n");
+                                printf("OTA OK, restarting...");
                                 esp_restart();
                             }
                             else
                             {
-                                printf("OTA failed...\n");
+                                printf("OTA failed...");
                             }
                         }
                         else
-                            printf("unable to read the new file name, aborting...\n");
+                            printf("unable to read the new file name, aborting...");
                     }
                     else
-                        printf("current firmware version (%.1f) is greater or equal to the available one (%.1f), nothing to do...\n", FIRMWARE_VERSION, new_version);
+                        printf("current firmware version (%.1f) is greater or equal to the available one (%.1f), nothing to do...", FIRMWARE_VERSION, new_version);
                 }
             }
         }
         else
-            printf("unable to download the json file, aborting...\n");
+            printf("unable to download the json file, aborting...");
 
         // cleanup
         esp_http_client_cleanup(client);
 
-        printf("\n");
+        printf("");
         vTaskDelay(30000 / portTICK_PERIOD_MS);
     }
 }
