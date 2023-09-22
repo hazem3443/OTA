@@ -254,6 +254,7 @@ void log_task(void *pvParameters)
 double FWVersion;
 // receive buffer
 char rcv_buffer[200];
+static SemaphoreHandle_t xSemaphore = NULL;
 
 void download_and_log_file(const char *url, double *FWVersion, char *binFilePath)
 {
@@ -261,10 +262,13 @@ void download_and_log_file(const char *url, double *FWVersion, char *binFilePath
         .url = url,
         .event_handler = _http_event_handler,
     };
+    xSemaphore = xSemaphoreCreateBinary();
     esp_http_client_handle_t client = esp_http_client_init(&config);
     esp_err_t err = esp_http_client_perform(client);
-
-    ESP_LOGW(TAG, "download file %s free heapSize %d", url, heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+    if (xSemaphoreTake(xSemaphore, portMAX_DELAY) != pdTRUE)
+    {
+        ESP_LOGE(TAG, "Error waiting for semaphore");
+    }
 
     if (err != ESP_OK)
     {
@@ -272,34 +276,32 @@ void download_and_log_file(const char *url, double *FWVersion, char *binFilePath
     }
     else
     {
-        char *buffer = malloc(1024);
-        int len = esp_http_client_read_response(client, buffer, 1024);
-        
-        printf("rcv_buffer = '%s' ,len = %d \n", buffer, len);
-        cJSON *json = cJSON_Parse(buffer);
+        ESP_LOGI(TAG, "received buffer = '%s' ,len = %d \n", rcv_buffer, strlen(rcv_buffer));
+        cJSON *json = cJSON_Parse(rcv_buffer);
         if (json == NULL)
-            printf("downloaded file is not a valid json, aborting...\n");
+            ESP_LOGE(TAG, "downloaded file is not a valid json, aborting...\n");
         else
         {
             cJSON *version = cJSON_GetObjectItemCaseSensitive(json, "version");
             cJSON *file = cJSON_GetObjectItemCaseSensitive(json, "binfile");
-            // FWVersion = version->valuedouble;
             if (!cJSON_IsNumber(version))
-                printf("unable to read new version, aborting...\n");
+            {
+                ESP_LOGE(TAG, "unable to read new version, aborting...\n");
+            }
             else
             {
                 *FWVersion = version->valuedouble;
-                printf("HTTPS OTA, firmware %.1f\n\n", *FWVersion);
+                ESP_LOGI(TAG, "HTTPS OTA, firmware %.1f\n\n", *FWVersion);
             }
 
             if (cJSON_IsString(file) && (file->valuestring != NULL))
             {
                 strcpy(binFilePath, file->valuestring);
-                printf("downloading and installing new firmware (%s)...\n", binFilePath);
+                ESP_LOGI(TAG, "downloading and installing new firmware (%s)...\n", binFilePath);
             }
             else
             {
-                printf("unable to read the new file name, aborting...\n");
+                ESP_LOGE(TAG, "unable to read the new file name, aborting...\n");
             }
         }
     }
@@ -371,6 +373,7 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
         }
         break;
     case HTTP_EVENT_ON_FINISH:
+        xSemaphoreGive(xSemaphore);
         break;
     case HTTP_EVENT_DISCONNECTED:
         break;
