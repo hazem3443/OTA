@@ -34,8 +34,8 @@ static EventGroupHandle_t s_wifi_event_group;
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT BIT1
 
-// extern const char server_cert_pem_start[] asm("_binary_domain_pem_start");
-// extern const char server_cert_pem_end[] asm("_binary_domain_pem_end");
+extern const char server_cert_pem_start[] asm("_binary_domain_pem_start");
+extern const char server_cert_pem_end[] asm("_binary_domain_pem_end");
 
 static const char *TAG_WIFI = "WIFI";
 static const char *TAG_HTTP = "HTTP";
@@ -255,16 +255,19 @@ void log_task(void *pvParameters)
 }
 */
 #include "esp_heap_caps.h"
-static int FWVersion;
+static double FWVersion;
 // receive buffer
 char rcv_buffer[200];
 static SemaphoreHandle_t xSemaphore = NULL;
 
-void download_and_log_file(const char *url, int *FWVersion, char *binFilePath)
+void download_and_log_file(const char *url, double *FWVersion, char *binFilePath)
 {
+    ESP_LOGW(TAG_HTTP, "Start Downloading File");
     esp_http_client_config_t config = {
         .url = url,
         .event_handler = _http_event_handler,
+        .cert_pem = server_cert_pem_start,
+        .cert_len = server_cert_pem_end - server_cert_pem_start
     };
     xSemaphore = xSemaphoreCreateBinary();
     esp_http_client_handle_t client = esp_http_client_init(&config);
@@ -294,18 +297,37 @@ void download_and_log_file(const char *url, int *FWVersion, char *binFilePath)
             }
             else
             {
-                ESP_LOGI(TAG_DOWNLOAD, "HTTPS OTA, firmware %i", *FWVersion);
-                if (*FWVersion < version->valuedouble)
+                ESP_LOGI(TAG_DOWNLOAD, "current FW version = %0.8f, server FW version = %f", *FWVersion, version->valuedouble);
+                if (*FWVersion != version->valuedouble)
                 {
                     *FWVersion = version->valuedouble;
+                    nvs_handle_t nvs_handle;
+                    esp_err_t err = nvs_open("storage", NVS_READWRITE, &nvs_handle);
+                    if (err != ESP_OK)
+                    {
+                        ESP_LOGE(TAG_NVS, "Error opening NVS handle %i",err);
+                    }
+                    // err = nvs_set_u64(nvs_handle, "FWVersion", *(uint64_t*)FWVersion);
+                    if (err != ESP_OK)
+                    {
+                        ESP_LOGE(TAG_NVS, "Error set FWVersion %i",err);
+                    }
+                    // err = nvs_commit(nvs_handle);
+                    if (err != ESP_OK)
+                    {
+                        ESP_LOGE(TAG_NVS, "Error commit FWVersion %i",err);
+                    }
+                    nvs_close(nvs_handle);
+
                     if (cJSON_IsString(file) && (file->valuestring != NULL))
                     {
                         strcpy(binFilePath, file->valuestring);
                         ESP_LOGI(TAG_DOWNLOAD, "downloading and installing new firmware (%s)...", binFilePath);
 
-                        // config.cert_pem = server_cert_pem_start;
-                        esp_https_ota_config_t ota_client_config = {  
-                            .http_config = &config, 
+                        config.url = binFilePath;
+                        esp_https_ota_config_t ota_client_config = {
+                            .http_config = &config,
+                            .partial_http_download = true,
                         };
                         esp_err_t ret = esp_https_ota(&ota_client_config);
                         if (ret == ESP_OK)
@@ -377,10 +399,12 @@ void download_and_log_file(const char *url, int *FWVersion, char *binFilePath)
 void app_main(void)
 {
     // Initialize NVS (Non-Volatile Storage)
+    ESP_LOGE(TAG_NVS, "Brand New FW");
     esp_err_t ret = nvs_flash_init();
     // If no free pages or new version found, erase NVS partition and reinitialize
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
     {
+        ESP_LOGE(TAG_NVS, "Error NO_FREE_PAGES || NEW_VERSION_FOUND");
         ESP_ERROR_CHECK(nvs_flash_erase());
         ret = nvs_flash_init();
     }
@@ -390,19 +414,22 @@ void app_main(void)
     esp_err_t err = nvs_open("storage", NVS_READONLY, &nvs_handle);
     if (err != ESP_OK)
     {
-        ESP_LOGE(TAG_NVS, "Error opening NVS handle");
+        ESP_LOGE(TAG_NVS, "Error opening NVS handle %i",err);
     }
 
     // Read the binary data
-    size_t size = sizeof(int);
-    err = nvs_get_blob(nvs_handle, "FWVersion", &FWVersion, &size);
+    // size_t size = sizeof(double);
+    err = nvs_get_u64(nvs_handle, "FWVersion", (uint64_t*)&FWVersion);
     if (err != ESP_OK)
     {
-        ESP_LOGE(TAG_NVS, "Error getting value");
+        ESP_LOGE(TAG_NVS, "Error(%i) getting value create it with FWVersion = 0",err);
+        FWVersion = 0;
+        nvs_set_u64(nvs_handle, "FWVersion", *(uint64_t*)&FWVersion);
+        nvs_commit(nvs_handle);
     }
     else
     {
-        ESP_LOGE(TAG_NVS, "FW Version %i", FWVersion);
+        ESP_LOGW(TAG_NVS, "FW Version %0.8f", FWVersion);
     }
 
     // Close the NVS handle
