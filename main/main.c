@@ -307,12 +307,12 @@ void download_and_log_file(const char *url, double *FWVersion, char *binFilePath
                     {
                         ESP_LOGE(TAG_NVS, "Error opening NVS handle %i",err);
                     }
-                    // err = nvs_set_u64(nvs_handle, "FWVersion", *(uint64_t*)FWVersion);
+                    err = nvs_set_u64(nvs_handle, "FWVersion", *(uint64_t*)FWVersion);
                     if (err != ESP_OK)
                     {
                         ESP_LOGE(TAG_NVS, "Error set FWVersion %i",err);
                     }
-                    // err = nvs_commit(nvs_handle);
+                    err = nvs_commit(nvs_handle);
                     if (err != ESP_OK)
                     {
                         ESP_LOGE(TAG_NVS, "Error commit FWVersion %i",err);
@@ -400,7 +400,7 @@ void download_and_log_file(const char *url, double *FWVersion, char *binFilePath
 void app_main(void)
 {
     // Initialize NVS (Non-Volatile Storage)
-    ESP_LOGE(TAG_NVS, "Brand New FW");
+    // ESP_LOGE(TAG_NVS, "Brand New FW");
     esp_err_t ret = nvs_flash_init();
     // If no free pages or new version found, erase NVS partition and reinitialize
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
