@@ -400,7 +400,7 @@ void download_and_log_file(const char *url, double *FWVersion, char *binFilePath
 void app_main(void)
 {
     // Initialize NVS (Non-Volatile Storage)
-    // ESP_LOGE(TAG_NVS, "Brand New FW");
+    ESP_LOGE(TAG_NVS, "Brand New FW");
     esp_err_t ret = nvs_flash_init();
     // If no free pages or new version found, erase NVS partition and reinitialize
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
