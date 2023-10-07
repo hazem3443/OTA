@@ -297,7 +297,7 @@ void download_and_log_file(const char *url, double *FWVersion, char *binFilePath
             }
             else
             {
-                ESP_LOGI(TAG_DOWNLOAD, "current FW version = %0.8f, server FW version = %f", *FWVersion, version->valuedouble);
+                ESP_LOGI(TAG_DOWNLOAD, "current FW version = %0.11f, server FW version = %0.11f", *FWVersion, version->valuedouble);
                 if (*FWVersion != version->valuedouble)
                 {
                     *FWVersion = version->valuedouble;
@@ -325,9 +325,10 @@ void download_and_log_file(const char *url, double *FWVersion, char *binFilePath
                         ESP_LOGI(TAG_DOWNLOAD, "downloading and installing new firmware (%s)...", binFilePath);
 
                         config.url = binFilePath;
+                        config.event_handler = NULL;
                         esp_https_ota_config_t ota_client_config = {
                             .http_config = &config,
-                            .partial_http_download = true,
+                            // .partial_http_download = true,
                         };
                         esp_err_t ret = esp_https_ota(&ota_client_config);
                         if (ret == ESP_OK)
@@ -429,7 +430,7 @@ void app_main(void)
     }
     else
     {
-        ESP_LOGW(TAG_NVS, "FW Version %0.8f", FWVersion);
+        ESP_LOGW(TAG_NVS, "FW Version %0.11f", FWVersion);
     }
 
     // Close the NVS handle
