@@ -307,12 +307,12 @@ void download_and_log_file(const char *url, double *FWVersion, char *binFilePath
                     {
                         ESP_LOGE(TAG_NVS, "Error opening NVS handle %i",err);
                     }
-                    // err = nvs_set_u64(nvs_handle, "FWVersion", *(uint64_t*)FWVersion);
+                    err = nvs_set_u64(nvs_handle, "FWVersion", *(uint64_t*)FWVersion);
                     if (err != ESP_OK)
                     {
                         ESP_LOGE(TAG_NVS, "Error set FWVersion %i",err);
                     }
-                    // err = nvs_commit(nvs_handle);
+                    err = nvs_commit(nvs_handle);
                     if (err != ESP_OK)
                     {
                         ESP_LOGE(TAG_NVS, "Error commit FWVersion %i",err);
