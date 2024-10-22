@@ -1,25 +1,80 @@
 | Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-S2 | ESP32-S3 |
 | ----------------- | ----- | -------- | -------- | -------- | -------- |
 
-# _Sample project_
+# OTA Project
 
-(See the README.md file in the upper level 'examples' directory for more information about examples.)
+This project demonstrates how to perform Over-The-Air (OTA) updates on an ESP32 device. The main application code is in `main/main.c`, which includes WiFi initialization, HTTP client setup, and OTA update functionality.
 
-This is the simplest buildable example. The example is used by command `idf.py create-project`
-that copies the project to user specified path and set it's name. For more information follow the [docs page](https://docs.espressif.com/projects/esp-idf/en/latest/api-guides/build-system.html#start-a-new-project)
+## Project Description
 
+The project is designed to connect to a WiFi network, download a firmware update from a specified URL, and apply the update to the ESP32 device. The update process is secured using HTTPS and a server certificate.
 
+## Setup Instructions
 
-## How to use example
-We encourage the users to use the example as a template for the new projects.
-A recommended way is to follow the instructions on a [docs page](https://docs.espressif.com/projects/esp-idf/en/latest/api-guides/build-system.html#start-a-new-project).
-
-Before running the program, you need to set the `WIFI_SSID` and `WIFI_PASSWORD` environment variables. You can do this in the terminal with the following commands:
+1. Clone the repository:
 ```bash
-export WIFI_SSID=your_wifi_ssid
-export WIFI_PASSWORD=your_wifi_password
+git clone https://github.com/hazem3443/OTA.git
+cd OTA
 ```
-Replace `your_wifi_ssid` and `your_wifi_password` with your actual WiFi SSID and password.
+
+2. Set up the development environment:
+   - Ensure you have Docker installed.
+   - Build the Docker container:
+     ```bash
+     docker build -t esp-idf .
+     ```
+   - Start the Docker container:
+     ```bash
+     docker run -it --rm -v $(pwd):/project esp-idf
+     ```
+
+3. Configure the project:
+   - Open the project in Visual Studio Code.
+   - Install the recommended extensions listed in `.devcontainer/devcontainer.json`.
+   - Configure the `.vscode/settings.json` file with your development environment settings.
+
+4. Set the WiFi credentials:
+   - Open `main/main.c` and update the `ssid` and `password` fields with your WiFi network credentials.
+
+5. Build and flash the project:
+   ```bash
+   idf.py build
+   idf.py flash
+   ```
+
+## Usage Examples
+
+1. Connect the ESP32 device to your computer via USB.
+2. Open a serial monitor to view the device logs:
+   ```bash
+   idf.py monitor
+   ```
+3. The device will connect to the WiFi network and check for firmware updates.
+4. If an update is available, the device will download and apply the update automatically.
+
+## Firmware.json
+
+The `Firmware.json` file is used to specify the firmware version and the URL of the binary file for OTA updates. The file should be hosted on a server and accessible via HTTPS. The format of the `Firmware.json` file is as follows:
+```json
+{
+  "version": 1.20231008005,
+  "binfile": "https://raw.githubusercontent.com/hazem3443/OTA/master/build/OTA.bin"
+}
+```
+- `version`: The version number of the firmware.
+- `binfile`: The URL of the binary file to be downloaded and applied.
+
+## Sweep.yaml
+
+The `sweep.yaml` file is used to configure Sweep AI for automated bug fixes and feature requests. Sweep AI reads the logs and outputs from your existing GitHub Actions to create pull requests for bug fixes and new features. The configuration options include:
+- `branch`: The branch to which Sweep AI will create pull requests.
+- `gha_enabled`: Whether to enable GitHub Actions integration.
+- `description`: A description of your project for Sweep AI.
+
+## Configuration Files
+
+- `.devcontainer/devcontainer.json`: Configuration file for setting up the development environment using Docker and Visual Studio Code.
+- `.vscode/settings.json`: Configuration file for Visual Studio Code settings, including paths to ESP-IDF tools and extensions.
 
 ## Main Flow of the Program
 Here is a mermaid diagram to illustrate the main flow of the program:
@@ -66,3 +121,4 @@ Below is short explanation of remaining files in the project folder.
 │   ├── CMakeLists.txt
 │   └── main.c
 └── README.md                  This is the file you are currently reading
+```

@@ -44,7 +44,23 @@ static const char *TAG_UPDATE = "UPDATE_SW";
 static const char *TAG_NVS = "NVS";
 
 static int s_retry_num = 0;
+
+/**
+ * @brief HTTP event handler
+ * 
+ * @param evt HTTP client event
+ * @return esp_err_t 
+ */
 esp_err_t _http_event_handler(esp_http_client_event_t *evt);
+
+/**
+ * @brief Event handler for WiFi and IP events
+ * 
+ * @param arg User-defined argument
+ * @param event_base Event base
+ * @param event_id Event ID
+ * @param event_data Event data
+ */
 static void event_handler(void *arg, esp_event_base_t event_base,
                           int32_t event_id, void *event_data)
 {
@@ -75,6 +91,9 @@ static void event_handler(void *arg, esp_event_base_t event_base,
     }
 }
 
+/**
+ * @brief Initialize WiFi in station mode
+ */
 void wifi_init_sta(void)
 {
     s_wifi_event_group = xEventGroupCreate();
@@ -260,6 +279,13 @@ static double FWVersion;
 char rcv_buffer[200];
 static SemaphoreHandle_t xSemaphore = NULL;
 
+/**
+ * @brief Download and log file from the given URL
+ * 
+ * @param url URL of the file to download
+ * @param FWVersion Pointer to the firmware version
+ * @param binFilePath Path to the binary file
+ */
 void download_and_log_file(const char *url, double *FWVersion, char *binFilePath)
 {
     ESP_LOGW(TAG_HTTP, "Start Downloading File");
@@ -397,6 +423,9 @@ void download_and_log_file(const char *url, double *FWVersion, char *binFilePath
     esp_http_client_cleanup(client);
 }
 
+/**
+ * @brief Main application entry point
+ */
 void app_main(void)
 {
     // Initialize NVS (Non-Volatile Storage)
