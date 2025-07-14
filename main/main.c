@@ -310,6 +310,14 @@ void app_main(void)
     // Close the NVS handle
     nvs_close(nvs_handle);
 
+    // Log NVS statistics for debugging
+    nvs_stats_t nvs_stats;
+    nvs_get_stats(NULL, &nvs_stats);
+    ESP_LOGW(TAG_NVS, "Total entries: %d", nvs_stats.total_entries);
+    ESP_LOGW(TAG_NVS, "Used entries: %d", nvs_stats.used_entries);
+    ESP_LOGW(TAG_NVS, "Free entries: %d", nvs_stats.free_entries);
+    ESP_LOGW(TAG_NVS, "Namespace count: %d", nvs_stats.namespace_count);
+
     // load master server version
 
     // Log the WiFi mode
